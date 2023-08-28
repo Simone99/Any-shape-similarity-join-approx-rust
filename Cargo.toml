@@ -1,0 +1,23 @@
+[package]
+name = "any-shape-similarity-join-approx-rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+avl = "*"
+rand = "*"
+queues = "*"
+
+[features]
+default = ["cell_distance_center", "l2_metric", "static"]
+cell_distance_points = []
+cell_distance_center = []
+cell_distance_vertices = []
+l1_metric = []
+l_inf_metric = []
+l2_metric = []
+static = []
+dynamic = []
+variable_r = []
