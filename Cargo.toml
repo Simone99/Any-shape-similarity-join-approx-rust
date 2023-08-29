@@ -9,9 +9,10 @@ edition = "2021"
 avl = "*"
 rand = "*"
 queues = "*"
+mut-binary-heap = "0.1.0"
 
 [features]
-default = ["cell_distance_center", "l2_metric", "static"]
+default = ["weighted_edges", "cell_distance_center", "l2_metric", "static"]
 cell_distance_points = []
 cell_distance_center = []
 cell_distance_vertices = []
@@ -21,3 +22,6 @@ l2_metric = []
 static = []
 dynamic = []
 variable_r = []
+normal = []
+weighted_vertices = []
+weighted_edges = []

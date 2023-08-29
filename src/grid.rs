@@ -1,30 +1,52 @@
 extern crate queues;
 use avl::AvlTreeMap;
+#[cfg(not(feature = "normal"))]
+use mut_binary_heap::*;
 use queues::*;
+#[cfg(feature = "weighted_vertices")]
+use std::cmp::Reverse;
+#[cfg(not(feature = "weighted_vertices"))]
+use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Write;
+#[cfg(all(feature = "weighted_vertices", feature = "variable_r"))]
+use std::sync::{Arc, Mutex};
 use std::{
     collections::{HashMap, LinkedList},
-    fs::File,
     io::BufWriter,
 };
 
+#[cfg(not(feature = "normal"))]
+use crate::heap_node::HeapNode;
+#[cfg(feature = "weighted_vertices")]
+use crate::heap_node::InnerHeapNode;
 use crate::{cell::Cell, database::Database, graph::Graph, point::Point};
 
 pub const QUERY_RESULT_OUTPUT_FILE: &'static str = "query_result.txt";
 const POINT_SEPARATOR: &'static str = " | ";
 pub struct Grid {
     cells: AvlTreeMap<Vec<i32>, Cell>,
+    #[cfg(feature = "normal")]
     active_cells_tree: AvlTreeMap<Vec<i32>, &'static mut Cell>,
+    #[cfg(all(not(feature = "normal"), not(feature = "variable_r")))]
+    cells_heap: BinaryHeap<Vec<*mut Cell>, HeapNode>,
+    #[cfg(all(not(feature = "normal"), feature = "variable_r"))]
+    cells_heap: BinaryHeap<Vec<Arc<Cell>>, HeapNode>,
     eps: f32,
     r: f32,
 }
+#[cfg(feature = "weighted_edges")]
+const PRIORITY_FUNCTION: &'static dyn Fn(f32, f32, u32) -> f32 =
+    &|distance: f32, r: f32, e: u32| (e as f32) * r / distance;
 
 impl Grid {
     pub fn new(db: &Database, g: &Graph, eps: f32, r: f32) -> Grid {
         let mut result = Grid {
             cells: AvlTreeMap::new(),
+            #[cfg(feature = "normal")]
             active_cells_tree: AvlTreeMap::new(),
+            #[cfg(not(feature = "normal"))]
+            cells_heap: BinaryHeap::new(),
             eps,
             r,
         };
@@ -39,7 +61,7 @@ impl Grid {
         result
     }
 
-    unsafe fn update_mc_recursive(
+    unsafe fn update_recursive(
         grid: *mut Grid,
         q: *mut Queue<u32>,
         g: &Graph,
@@ -125,7 +147,7 @@ impl Grid {
                         .expect("Error pushing into the queue during BFS!");
                 }
                 let q2_ptr = &mut q2 as *mut Queue<u32>;
-                Self::update_mc_recursive(
+                Self::update_recursive(
                     grid,
                     q2_ptr,
                     g,
@@ -146,7 +168,7 @@ impl Grid {
         }
     }
 
-    unsafe fn update_mc(
+    unsafe fn update(
         grid: *mut Grid,
         cell: &'static mut Cell,
         g: &Graph,
@@ -180,7 +202,7 @@ impl Grid {
 
         let mut all_solutions: Vec<Vec<Option<&mut Cell>>> = Vec::new();
 
-        Self::update_mc_recursive(
+        Self::update_recursive(
             grid,
             &mut q,
             g,
@@ -214,14 +236,16 @@ impl Grid {
                 ))]
                 let mut cell_tmp = Cell {
                     points_set: HashMap::new(),
-                    m: Vec::new(),
+                    m: vec![0; g.v as usize],
+                    #[cfg(feature = "normal")]
                     m_c: 0,
                     coordinates: cell_coordinates.clone(),
                 };
                 #[cfg(feature = "cell_distance_vertices")]
                 let mut cell_tmp = Cell {
                     points_set: HashMap::new(),
-                    m: Vec::new(),
+                    m: vec![0; g.v as usize],
+                    #[cfg(feature = "normal")]
                     m_c: 0,
                     coordinates: cell_coordinates.clone(),
                     cell_vertices: Vec::new(),
@@ -229,23 +253,25 @@ impl Grid {
                 #[cfg(feature = "cell_distance_center")]
                 let mut cell_tmp = Cell {
                     points_set: HashMap::new(),
-                    m: Vec::new(),
+                    m: vec![0; g.v as usize],
+                    #[cfg(feature = "normal")]
                     m_c: 0,
                     coordinates: cell_coordinates.clone(),
                     cell_center: Point {
                         coordinates: Vec::new(),
+                        #[cfg(feature = "weighted_vertices")]
+                        weight: 0_f32,
                     },
                     eps: 0_f32,
                 };
-                for _ in 0..g.v {
-                    cell_tmp.m.push(0);
-                }
 
                 #[cfg(feature = "cell_distance_vertices")]
                 {
                     // If we have to check the cell vertices for the distance
                     let mut core_point = Point {
                         coordinates: Vec::new(),
+                        #[cfg(feature = "weighted_vertices")]
+                        weight: 0_f32,
                     };
                     for coordinate_i in &cell_coordinates {
                         core_point
@@ -283,6 +309,8 @@ impl Grid {
                     // If we have to check the cell vertices for the distance
                     let mut core_point = Point {
                         coordinates: Vec::new(),
+                        #[cfg(feature = "weighted_vertices")]
+                        weight: 0_f32,
                     };
                     for coordinate_i in &cell_coordinates {
                         core_point
@@ -307,20 +335,33 @@ impl Grid {
         if !(*cell_ptr).points_set.contains_key(&color) {
             (*cell_ptr).points_set.insert(color, Vec::new());
         }
+        #[cfg(not(feature = "weighted_vertices"))]
+        // Push without ordering
         (*cell_ptr)
             .points_set
             .get_mut(&color)
             .unwrap()
             .push(p.clone());
+        #[cfg(feature = "weighted_vertices")]
+        {
+            // Sorted insertion
+            let tmp_vec = (*cell_ptr).points_set.get_mut(&color).unwrap();
+            match tmp_vec.binary_search_by_key(&Reverse(p), |point| Reverse(point)) {
+                Ok(_pos) => { /* Element already in the vector */ }
+                Err(pos) => tmp_vec.insert(pos, p.clone()),
+            }
+        }
+
         (*cell_ptr).m[color as usize] += 1;
 
+        #[cfg(feature = "normal")]
         // Optimization
-
         if color == 0 && (*cell_ptr).m[color as usize] != 1 {
             (*cell_ptr).m_c += (*cell_ptr).m_c / ((*cell_ptr).m[0] - 1);
             return;
         }
 
+        #[cfg(feature = "normal")]
         let lambda_function: &mut dyn FnMut(*mut Grid, &mut Vec<Vec<Option<&mut Cell>>>) =
             &mut |grid: *mut Grid, all_solutions: &mut Vec<Vec<Option<&mut Cell>>>| {
                 for sol in all_solutions {
@@ -340,7 +381,94 @@ impl Grid {
                 }
             };
 
-        Self::update_mc(grid, cell, g, color, lambda_function);
+        #[cfg(feature = "weighted_vertices")]
+        let lambda_function: &mut dyn FnMut(*mut Grid, &mut Vec<Vec<Option<&mut Cell>>>) =
+            &mut |grid: *mut Grid, all_solutions: &mut Vec<Vec<Option<&mut Cell>>>| {
+                for sol in all_solutions {
+                    #[cfg(not(feature = "variable_r"))]
+                    let key: Vec<*mut Cell> = sol
+                        .into_iter()
+                        .map(|opt| opt.as_mut().unwrap())
+                        .map(|cell| *cell as *mut Cell)
+                        .collect();
+                    #[cfg(feature = "variable_r")]
+                    let key: Vec<Arc<Cell>> = sol
+                        .into_iter()
+                        .map(|opt| opt.as_ref().unwrap())
+                        .map(|cell| Arc::new(**cell))
+                        .collect();
+                    let priority: f32 = (0..g.v)
+                        .map(|i| sol[i as usize].as_ref().unwrap().points_set[&i][0].weight)
+                        .sum();
+                    // Look for the solution inside the heap
+                    match (*grid).cells_heap.get_mut(&key) {
+                        Some(mut node) => {
+                            (*node).priority = priority;
+                        }
+                        None => {
+                            let mut tmp_heapnode = HeapNode::new(key.clone());
+                            let indices = vec![0; g.v as usize];
+                            tmp_heapnode
+                                .solutions_heap
+                                .push(InnerHeapNode::new(indices.clone(), key.clone()));
+                            tmp_heapnode.indices_used.insert(indices);
+                            tmp_heapnode.priority = priority;
+                            (*grid).cells_heap.push(key.clone(), tmp_heapnode.clone());
+                        }
+                    };
+                }
+            };
+
+        #[cfg(feature = "weighted_edges")]
+        let lambda_function: &mut dyn FnMut(*mut Grid, &mut Vec<Vec<Option<&mut Cell>>>) =
+            &mut |grid: *mut Grid, all_solutions: &mut Vec<Vec<Option<&mut Cell>>>| {
+                for sol in all_solutions {
+                    let key: Vec<*mut Cell> = sol
+                        .into_iter()
+                        .map(|opt| opt.as_mut().unwrap())
+                        .map(|cell| *cell as *mut Cell)
+                        .collect();
+                    let priority = Grid::get_priority(grid, &key.clone(), g, PRIORITY_FUNCTION);
+                    // Look for the solution inside the heap
+                    match (*grid).cells_heap.get_mut(&key.clone()) {
+                        Some(mut node) => {
+                            (*node).priority = priority;
+                        }
+                        None => {
+                            (*grid).cells_heap.push(
+                                key.clone(),
+                                HeapNode {
+                                    cells: key,
+                                    priority,
+                                },
+                            );
+                        }
+                    };
+                }
+            };
+
+        Self::update(grid, cell, g, color, lambda_function);
+    }
+
+    #[cfg(feature = "weighted_edges")]
+    fn get_priority(
+        grid: *mut Grid,
+        sol: &Vec<*mut Cell>,
+        g: &Graph,
+        priority_function: &dyn Fn(f32, f32, u32) -> f32,
+    ) -> f32 {
+        unsafe {
+            let g_clone = g.clone();
+            priority_function(
+                g_clone
+                    .edge_list
+                    .into_iter()
+                    .map(|edge| (*sol[edge.0 as usize]).distance_from(&(*(sol[edge.1 as usize]))))
+                    .sum(),
+                (*grid).r,
+                g.e,
+            )
+        }
     }
 
     pub unsafe fn delete_point(grid: *mut Grid, color: u32, p: &Point, g: &Graph) {
@@ -356,6 +484,7 @@ impl Grid {
             None => return,
         };
         // Look for the element to delete
+        #[cfg(not(feature = "weighted_vertices"))]
         let i = match (0..cell.points_set[&color].len()).find_map(|i| {
             if cell.points_set[&color][i] == *p {
                 return Some(i);
@@ -365,7 +494,15 @@ impl Grid {
             Some(i) => i,
             None => return,
         };
+        #[cfg(feature = "weighted_vertices")]
+        let i = match cell.points_set[&color]
+            .binary_search_by_key(&Reverse(p), |point| Reverse(point))
+        {
+            Ok(pos) => pos,
+            Err(_pos) => return,
+        };
 
+        #[cfg(feature = "normal")]
         if color == 0 && cell.m[0] > 1 {
             cell.m_c -= cell.m_c / cell.m[0];
             cell.m[0] -= 1;
@@ -375,6 +512,7 @@ impl Grid {
 
         let cell_ptr = cell as *mut Cell;
 
+        #[cfg(feature = "normal")]
         //Update mc
         let lambda_function: &mut dyn FnMut(*mut Grid, &mut Vec<Vec<Option<&mut Cell>>>) =
             &mut |grid: *mut Grid, all_solutions: &mut Vec<Vec<Option<&mut Cell>>>| {
@@ -406,9 +544,63 @@ impl Grid {
                 }
             };
 
-        Self::update_mc(grid, cell, g, color, lambda_function);
+        #[cfg(not(feature = "normal"))]
+        let lambda_function: &mut dyn FnMut(*mut Grid, &mut Vec<Vec<Option<&mut Cell>>>) =
+            &mut |grid: *mut Grid, all_solutions: &mut Vec<Vec<Option<&mut Cell>>>| {
+                // Remove the element
+                (*cell_ptr).points_set.get_mut(&color).unwrap().remove(i);
+                (*cell_ptr).m[color as usize] -= 1;
+
+                // Update priority
+                if i == 0 {
+                    // This is the only case i which the cell could be empty, because if we delete a point in another section of the vector
+                    // for sure we have other elements stored in the vector, so the cell is not empty.
+                    // Check if the cell is now empty
+                    let empty = (*cell_ptr).points_set.values().all(|x| x.is_empty());
+                    // If it was the first element we need to actually change the priority in the corresponding heap node
+                    for sol in all_solutions {
+                        // Look for the solution inside the heap
+                        #[cfg(not(feature = "variable_r"))]
+                        let key: Vec<*mut Cell> = sol
+                            .into_iter()
+                            .map(|opt| opt.as_mut().unwrap())
+                            .map(|cell| *cell as *mut Cell)
+                            .collect();
+                        #[cfg(feature = "variable_r")]
+                        let key: Vec<Arc<Cell>> = sol
+                            .into_iter()
+                            .map(|opt| opt.as_ref().unwrap())
+                            .map(|cell| Arc::new(**cell))
+                            .collect();
+                        match (*grid).cells_heap.get_mut(&key) {
+                            Some(mut node) => {
+                                if empty {
+                                    (*node).priority = 0.0;
+                                } else {
+                                    // Check if the deleted point was the last stored in the corresponding relation
+                                    #[cfg(feature = "weighted_vertices")]
+                                    if (*cell_ptr).points_set[&color].len() == 0 {
+                                        (*node).priority = 0.0;
+                                    } else {
+                                        (*node).priority = (*node).priority - p.weight
+                                            + (*cell_ptr).points_set[&color][0].weight;
+                                    }
+                                    #[cfg(feature = "weighted_edges")]
+                                    if (*cell_ptr).points_set[&color].len() == 0 {
+                                        (*node).priority = 0.0;
+                                    }
+                                }
+                            }
+                            None => {}
+                        };
+                    }
+                }
+            };
+
+        Self::update(grid, cell, g, color, lambda_function);
     }
 
+    #[cfg(feature = "normal")]
     pub fn answer_query(&mut self, g: &Graph) {
         let grid_ptr = self as *mut Grid;
         unsafe {
@@ -462,7 +654,191 @@ impl Grid {
                     }
                 };
             for solution in (*grid_ptr).active_cells_tree.values_mut() {
-                Self::update_mc(grid_ptr, *solution, g, 0, lambda_function);
+                Self::update(grid_ptr, *solution, g, 0, lambda_function);
+            }
+        }
+    }
+
+    #[cfg(feature = "weighted_vertices")]
+    pub fn answer_query(&mut self, g: &Graph, n: u32) {
+        let grid_ptr = self as *mut Grid;
+        let mut n_to_report = n;
+        let err_message = "Error writing the query result file!";
+        let mut stream = BufWriter::new(
+            OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(QUERY_RESULT_OUTPUT_FILE)
+                .expect("Unable to open file"),
+        );
+
+        unsafe {
+            while n_to_report > 0 {
+                // Report the highest shape
+                let mut node = match (*grid_ptr).cells_heap.peek_mut() {
+                    Some(node) => node,
+                    None => break,
+                };
+                if (*node).priority == 0.0 {
+                    break;
+                }
+                let sol = (*node).cells.clone();
+                let indices = match (*node).solutions_heap.pop() {
+                    Some(inner_node) => inner_node.indices,
+                    None => break,
+                };
+                for i in 0..(g.v - 1) {
+                    write!(
+                        stream,
+                        "{}{}",
+                        (*sol[i as usize]).points_set[&i][indices[i as usize]],
+                        POINT_SEPARATOR
+                    )
+                    .expect(err_message);
+                }
+                let i = g.v - 1;
+                writeln!(
+                    stream,
+                    "{}",
+                    (*sol[i as usize]).points_set[&i][indices[i as usize]]
+                )
+                .expect(err_message);
+
+                // Time to update the indices
+                let referred_cells = (*node).cells.clone();
+                for i in 0..(g.v as usize) {
+                    let mut next_combination = Vec::from(indices.clone());
+                    next_combination[i] += 1;
+                    if next_combination[i] < (*(*node).cells[i]).points_set[&(i as u32)].len()
+                        && !(*node).indices_used.contains(&next_combination)
+                    {
+                        (*node).solutions_heap.push(InnerHeapNode::new(
+                            next_combination.clone(),
+                            referred_cells.clone(),
+                        ));
+                        (*node).indices_used.insert(next_combination);
+                    }
+                }
+
+                // Time to update heapnode priority
+                match (*node).solutions_heap.peek() {
+                    Some(inner_node) => {
+                        (*node).priority = (0..(g.v as usize))
+                            .map(|i| {
+                                (*(*node).cells[i]).points_set[&(i as u32)][inner_node.indices[i]]
+                                    .weight
+                            })
+                            .sum();
+                    }
+                    None => {
+                        (*node).priority = 0.0;
+                    }
+                };
+
+                n_to_report -= 1;
+            }
+
+            drop(stream);
+
+            // Time to reset all data structures to be ready to answer another query
+            for (_, hn) in &mut (*grid_ptr).cells_heap {
+                hn.indices_used.clear();
+                hn.solutions_heap.clear();
+                let reset_value = vec![0; g.v as usize];
+                hn.indices_used.insert(reset_value.clone());
+                hn.solutions_heap
+                    .push(InnerHeapNode::new(reset_value, hn.cells.clone()));
+                hn.priority = (0..(g.v as usize))
+                    .filter(|i| !(*hn.cells[*i]).points_set[&(*i as u32)].is_empty())
+                    .map(|i| (*hn.cells[i]).points_set[&(i as u32)][0].weight)
+                    .sum();
+            }
+        }
+    }
+
+    #[cfg(feature = "weighted_edges")]
+    pub fn answer_query(&mut self, g: &Graph, n: u32) {
+        let grid_ptr = self as *mut Grid;
+        let mut n_to_report = n;
+        let mut stream = BufWriter::new(
+            OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(QUERY_RESULT_OUTPUT_FILE)
+                .expect("Unable to open file"),
+        );
+        unsafe fn report_all_points(
+            g: &Graph,
+            solution: &Vec<*mut Cell>,
+            pos: usize,
+            final_combination: *mut Vec<Option<&Point>>,
+            n_to_report: &mut u32,
+            output_f: &mut BufWriter<File>,
+        ) {
+            if *n_to_report <= 0 {
+                return;
+            }
+            if pos >= g.v as usize {
+                for i in 0..(g.v - 1) {
+                    write!(
+                        output_f,
+                        "{}{}",
+                        (*final_combination)[i as usize].unwrap_unchecked(),
+                        POINT_SEPARATOR
+                    )
+                    .expect("Error writing the query result file!");
+                }
+                writeln!(
+                    output_f,
+                    "{}",
+                    (*final_combination)[(g.v - 1) as usize].unwrap_unchecked()
+                )
+                .expect("Error writing the query result file!");
+                *n_to_report -= 1;
+                return;
+            }
+            let cell_ptr = solution[pos];
+            for p in (*cell_ptr).points_set.get(&(pos as u32)).unwrap_unchecked() {
+                (*final_combination)[pos] = Some(p);
+                report_all_points(
+                    g,
+                    solution,
+                    pos + 1,
+                    final_combination,
+                    n_to_report,
+                    output_f,
+                );
+            }
+        }
+        unsafe {
+            while n_to_report > 0 {
+                // Report the highest shape
+                let mut node = match (*grid_ptr).cells_heap.peek_mut() {
+                    Some(node) => node,
+                    None => break,
+                };
+                if (*node).priority == 0.0 {
+                    break;
+                }
+                let sol = (*node).cells.clone();
+                let mut point_solution: Vec<Option<&Point>> = vec![None; g.v as usize];
+                report_all_points(
+                    g,
+                    &sol,
+                    0,
+                    &mut point_solution,
+                    &mut n_to_report,
+                    &mut stream,
+                );
+
+                // Time to update heapnode priority
+                (*node).priority = 0.0;
+            }
+            drop(stream);
+
+            // Time to reset all data structures to be ready to answer another query
+            for (_, hn) in &mut (*grid_ptr).cells_heap {
+                (*hn).priority = Grid::get_priority(grid_ptr, &hn.cells, g, PRIORITY_FUNCTION);
             }
         }
     }

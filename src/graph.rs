@@ -6,6 +6,8 @@ pub struct Graph {
     pub v: u32,
     pub e: u32,
     pub adj_list: Vec<LinkedList<u32>>,
+    #[cfg(feature = "weighted_edges")]
+    pub edge_list: Vec<(u32, u32)>,
 }
 
 impl Graph {
@@ -14,6 +16,8 @@ impl Graph {
             v: 0,
             e: 0,
             adj_list: Vec::new(),
+            #[cfg(feature = "weighted_edges")]
+            edge_list: Vec::new(),
         };
         let mut graph_string = String::new();
         input_file
@@ -38,6 +42,8 @@ impl Graph {
             let v = str_edge[1].parse::<u32>().expect("Error parsing the file!");
             result.adj_list[u as usize].push_back(v);
             result.adj_list[v as usize].push_back(u);
+            #[cfg(feature = "weighted_edges")]
+            result.edge_list.push((u, v));
         }
         result
     }

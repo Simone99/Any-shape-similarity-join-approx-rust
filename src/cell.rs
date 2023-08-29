@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::{cmp::Ordering, collections::HashMap, fmt, hash::Hash};
 
 use crate::point::Point;
 
@@ -6,6 +6,7 @@ use crate::point::Point;
 pub struct Cell {
     pub points_set: HashMap<u32, Vec<Point>>,
     pub m: Vec<u64>,
+    #[cfg(feature = "normal")]
     pub m_c: u64,
     pub coordinates: Vec<i32>,
     #[cfg(feature = "cell_distance_vertices")]
@@ -82,3 +83,20 @@ impl PartialEq for Cell {
 }
 
 impl Eq for Cell {}
+
+impl Hash for Cell {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.coordinates.hash(state);
+    }
+}
+
+impl fmt::Display for Cell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Cell: (").expect("Error writing a point to the output stream!");
+        for i in 0..(self.coordinates.len() - 1) {
+            write!(f, "{}, ", self.coordinates[i])
+                .expect("Error writing a point to the output stream!");
+        }
+        write!(f, "{})", self.coordinates[self.coordinates.len() - 1])
+    }
+}

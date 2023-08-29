@@ -35,6 +35,8 @@ pub mod cell;
 pub mod database;
 pub mod graph;
 pub mod grid;
+#[cfg(not(feature = "normal"))]
+pub mod heap_node;
 pub mod point;
 
 const GRAPH_FILE: &'static str = "input_graph.txt";
@@ -58,34 +60,156 @@ fn main() {
     {
         // Tests with different R
         println!("Running tests with different Rs...");
-        test_case(&g, 1.5, 2, 0.1, &mut output_file);
-        test_case(&g, 1.0, 2, 0.1, &mut output_file);
-        test_case(&g, 0.5, 2, 0.1, &mut output_file);
-        test_case(&g, 2.0, 2, 0.1, &mut output_file);
-        test_case(&g, 4.0, 2, 0.1, &mut output_file);
+        test_case(
+            &g,
+            1.5,
+            2,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
+        test_case(
+            &g,
+            1.0,
+            2,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
+        test_case(
+            &g,
+            0.5,
+            2,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
+        test_case(
+            &g,
+            2.0,
+            2,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
+        test_case(
+            &g,
+            4.0,
+            2,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
 
         // Tests with different epsilon
         println!("Running tests with different epsilons...");
-        test_case(&g, 1.5, 2, 0.1, &mut output_file);
-        test_case(&g, 1.5, 2, 0.35, &mut output_file);
-        test_case(&g, 1.5, 2, 0.065, &mut output_file);
-        test_case(&g, 1.5, 2, 1.0, &mut output_file);
-        test_case(&g, 1.5, 2, 0.01, &mut output_file);
+        test_case(
+            &g,
+            1.5,
+            2,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
+        test_case(
+            &g,
+            1.5,
+            2,
+            0.35,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
+        test_case(
+            &g,
+            1.5,
+            2,
+            0.065,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
+        test_case(
+            &g,
+            1.5,
+            2,
+            1.0,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
+        test_case(
+            &g,
+            1.5,
+            2,
+            0.01,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
 
         // Tests with different dimensions
         println!("Running tests with different dimensions...");
         remove_file(DATABASE_FILE).expect("Error deleting database file!");
-        test_case(&g, 1.5, 7, 0.1, &mut output_file);
+        test_case(
+            &g,
+            1.5,
+            7,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
         remove_file(DATABASE_FILE).expect("Error deleting database file!");
-        test_case(&g, 1.5, 3, 0.1, &mut output_file);
+        test_case(
+            &g,
+            1.5,
+            3,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
         remove_file(DATABASE_FILE).expect("Error deleting database file!");
-        test_case(&g, 1.5, 4, 0.1, &mut output_file);
+        test_case(
+            &g,
+            1.5,
+            4,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
         remove_file(DATABASE_FILE).expect("Error deleting database file!");
-        test_case(&g, 1.5, 2, 0.1, &mut output_file);
+        test_case(
+            &g,
+            1.5,
+            2,
+            0.1,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
     }
     #[cfg(feature = "dynamic")]
     {
-        test_case(&g, 1.5, 2, 0.01, 50, 5, &mut output_file);
+        test_case(
+            &g,
+            1.5,
+            2,
+            0.01,
+            50,
+            5,
+            #[cfg(not(feature = "normal"))]
+            100,
+            &mut output_file,
+        );
     }
     #[cfg(feature = "variable_r")]
     {
@@ -148,15 +272,54 @@ fn main() {
             now.elapsed().as_secs_f64()
         );
 
-        test_case(Arc::clone(&grids), &g, &rs, 0.84, end_i);
-        test_case(Arc::clone(&grids), &g, &rs, 1.27, end_i);
-        test_case(Arc::clone(&grids), &g, &rs, 1.93, end_i);
-        test_case(Arc::clone(&grids), &g, &rs, 3.03, end_i);
+        test_case(
+            Arc::clone(&grids),
+            &g,
+            &rs,
+            0.84,
+            end_i,
+            #[cfg(not(feature = "normal"))]
+            100,
+        );
+        test_case(
+            Arc::clone(&grids),
+            &g,
+            &rs,
+            1.27,
+            end_i,
+            #[cfg(not(feature = "normal"))]
+            100,
+        );
+        test_case(
+            Arc::clone(&grids),
+            &g,
+            &rs,
+            1.93,
+            end_i,
+            #[cfg(not(feature = "normal"))]
+            100,
+        );
+        test_case(
+            Arc::clone(&grids),
+            &g,
+            &rs,
+            3.03,
+            end_i,
+            #[cfg(not(feature = "normal"))]
+            100,
+        );
     }
 }
 
 #[cfg(feature = "static")]
-fn test_case(g: &Graph, r: f32, n_dimensions: u8, eps: f32, out: &mut BufWriter<File>) {
+fn test_case(
+    g: &Graph,
+    r: f32,
+    n_dimensions: u8,
+    eps: f32,
+    #[cfg(not(feature = "normal"))] n_to_report: u32,
+    out: &mut BufWriter<File>,
+) {
     let err_message = "Error writing to output file!";
     writeln!(out, "Test case R({}), d({}), eps({})", r, n_dimensions, eps).expect(err_message);
     let db = Database::new(g.v, n_dimensions);
@@ -175,6 +338,9 @@ fn test_case(g: &Graph, r: f32, n_dimensions: u8, eps: f32, out: &mut BufWriter<
         remove_file(QUERY_RESULT_OUTPUT_FILE).expect("Error deleting the output file!");
     }
     now = Instant::now();
+    #[cfg(not(feature = "normal"))]
+    gd.answer_query(&g, n_to_report);
+    #[cfg(feature = "normal")]
     gd.answer_query(&g);
     elapsed_time = now.elapsed();
     writeln!(
@@ -207,6 +373,7 @@ fn test_case(
     eps: f32,
     initialization_percentage: u8,
     percentage_to_split: u8,
+    #[cfg(not(feature = "normal"))] n_to_report: u32,
     out: &mut BufWriter<File>,
 ) {
     let err_message = "Error writing to output file!";
@@ -256,7 +423,10 @@ fn test_case(
             remove_file(QUERY_RESULT_OUTPUT_FILE).expect("Error deleting the output file!");
         }
         now = Instant::now();
+        #[cfg(feature = "normal")]
         gd.answer_query(g);
+        #[cfg(not(feature = "normal"))]
+        gd.answer_query(g, n_to_report);
         query_times.push(now.elapsed().as_secs_f64());
         println!("Checking shapes...");
         real_approx_shapes.push(check_real_approx(g, r));
@@ -285,6 +455,7 @@ fn test_case(
     rs: &Vec<f32>,
     radius: f32,
     end_i: usize,
+    #[cfg(not(feature = "normal"))] n_to_report: u32,
 ) {
     let mut l = 0;
     let mut r = end_i;
@@ -297,11 +468,13 @@ fn test_case(
         }
     }
     println!("Answering query with radius: {}", rs[r]);
+    let tmptmp = &mut grids.lock().expect("Error acquiring the lock!");
+    let tmp_grid = tmptmp[r].as_mut().unwrap();
     let now = Instant::now();
-    (&mut grids.lock().expect("Error acquiring the lock!"))[r]
-        .as_mut()
-        .unwrap()
-        .answer_query(g);
+    #[cfg(feature = "normal")]
+    tmp_grid.answer_query(g);
+    #[cfg(not(feature = "normal"))]
+    tmp_grid.answer_query(g, n_to_report);
     println!(
         "Time to answer the query: {:.5}s",
         now.elapsed().as_secs_f64()
@@ -322,11 +495,12 @@ fn check_real_approx(g: &Graph, r: f32) -> (u32, u32) {
     input_file
         .read_to_string(&mut shapes_list_string)
         .expect("Error reading the database file!");
-    let mut shape_list: Vec<&str> = shapes_list_string.trim().split('\n').collect();
-
-    shape_list.remove(shape_list.len() - 1);
+    let shape_list: Vec<&str> = shapes_list_string.trim().split('\n').collect();
 
     for shape in shape_list {
+        if shape.is_empty() {
+            continue;
+        }
         let mut shape_vertices = Vec::new();
         let vertices: Vec<&str> = shape.split('|').collect();
         for vertex_str in vertices {

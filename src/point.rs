@@ -1,14 +1,28 @@
+#[cfg(feature = "weighted_vertices")]
+use std::cmp::Ordering;
 use std::fmt;
 
-#[derive(PartialEq, PartialOrd, Clone)]
+#[derive(Clone)]
+#[cfg_attr(not(feature = "weighted_vertices"), derive(PartialEq, PartialOrd))]
 pub struct Point {
     pub coordinates: Vec<f32>,
+    #[cfg(feature = "weighted_vertices")]
+    pub weight: f32,
 }
 
 impl Point {
+    #[cfg(not(feature = "weighted_vertices"))]
     pub fn new(coordinates: &Vec<f32>) -> Point {
         Point {
             coordinates: coordinates.clone(),
+        }
+    }
+
+    #[cfg(feature = "weighted_vertices")]
+    pub fn new(coordinates: &Vec<f32>, weight: f32) -> Point {
+        Point {
+            coordinates: coordinates.clone(),
+            weight,
         }
     }
 
@@ -39,8 +53,23 @@ impl Point {
         // (8.0, 9.0)
         let mut result = Point {
             coordinates: Vec::new(),
+            #[cfg(feature = "weighted_vertices")]
+            weight: 0_f32,
         };
-        let coordinates: Vec<&str> = point_str.trim().split(',').collect();
+        let coordinates: Vec<&str>;
+        #[cfg(feature = "weighted_vertices")]
+        {
+            let coordinates_weight: Vec<&str> = point_str.trim().split('-').collect();
+            result.weight = coordinates_weight[1]
+                .trim()
+                .parse::<f32>()
+                .expect("Error parsing point string!");
+            coordinates = coordinates_weight[0].trim().split(',').collect();
+        }
+        #[cfg(not(feature = "weighted_vertices"))]
+        {
+            coordinates = point_str.trim().split(',').collect();
+        }
         result.coordinates.push(
             coordinates[0][1..]
                 .parse::<f32>()
@@ -70,6 +99,38 @@ impl fmt::Display for Point {
             write!(f, "{}, ", self.coordinates[i])
                 .expect("Error writing a point to the output stream!");
         }
-        write!(f, "{})", self.coordinates[self.coordinates.len() - 1])
+        #[cfg(not(feature = "weighted_vertices"))]
+        return write!(f, "{})", self.coordinates[self.coordinates.len() - 1]);
+        #[cfg(feature = "weighted_vertices")]
+        return write!(
+            f,
+            "{}) - {}",
+            self.coordinates[self.coordinates.len() - 1],
+            self.weight
+        );
     }
 }
+
+#[cfg(feature = "weighted_vertices")]
+impl Ord for Point {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.weight.total_cmp(&other.weight)
+    }
+}
+
+#[cfg(feature = "weighted_vertices")]
+impl PartialOrd for Point {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.weight.partial_cmp(&other.weight)
+    }
+}
+
+#[cfg(feature = "weighted_vertices")]
+impl PartialEq for Point {
+    fn eq(&self, other: &Self) -> bool {
+        self.coordinates == other.coordinates && self.weight == other.weight
+    }
+}
+
+#[cfg(feature = "weighted_vertices")]
+impl Eq for Point {}

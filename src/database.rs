@@ -16,6 +16,8 @@ pub const MAX_RECORD_VALUE: f32 = 10.0;
 fn generate_random_point(d: u8, die: &Uniform<f32>, rng: &mut ThreadRng) -> Point {
     let mut result = Point {
         coordinates: Vec::new(),
+        #[cfg(feature = "weighted_vertices")]
+        weight: die.sample(rng),
     };
     for _ in 0..d {
         result.coordinates.push(die.sample(rng));
